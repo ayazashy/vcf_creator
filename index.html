@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>محرر جهات الاتصال وجداول VCF</title>
+  <meta name="description" content="منصة متقدمة وسريعة لإنشاء وتعديل بيانات جهات الاتصال جدولياً، مع تصدير فوري إلى VCF (vCard 2.1/3.0/4.0) و Google Contacts CSV و Outlook و JSON مع دعم كامل للترميز العربي Quoted-Printable (=D9=8A...) وتجاهل الحقول الفارغة.">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Command Header -->
+    <!-- Top Command Header -->
+    <header class="app-header">
+      <div class="header-brand-group">
+        <button type="button" class="btn btn-drawer-toggle" id="btn-toggle-drawer" title="فتح لوحة الأدوات والخيارات (القائمة)">
+          <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          <span id="txt-menu-toggle">الأدوات ☰</span>
+        </button>
+
+        <div class="brand-section">
+          <div class="brand-icon" title="جهات الاتصال">C</div>
+          <h1 class="brand-title" id="brand-title">محرر جهات الاتصال</h1>
+          <span class="brand-badge" id="app-status-badge">جاهز</span>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons on Header Bar -->
+      <div class="header-quick-actions">
+        <button type="button" class="btn btn-primary" id="btn-paste-to-cell" title="لصق البيانات من الحافظة في الخلية النشطة مباشرة">
+          <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          <span id="txt-paste-to-cell">لصق 📋</span>
+        </button>
+
+        <button type="button" class="btn" id="btn-add-row" title="إضافة صف جديد">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span id="txt-add-row">إضافة صف</span>
+        </button>
+
+        <button type="button" class="btn" id="btn-standardize-phones" title="توحيد أرقام الهواتف السعودية بصيغة +966">
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span id="txt-standardize-phones">+966 ⚡</span>
+        </button>
+
+        <button type="button" class="btn btn-accent-export" id="btn-open-export" title="تصدير إلى VCF أو CSV أو TSV أو JSON">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span id="txt-export">تصدير</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Slide-Out Sidebar Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <aside class="app-drawer" id="app-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <span class="drawer-header-icon">🛠️</span>
+          <h2 class="drawer-title" id="drawer-title">لوحة الأدوات والخيارات</h2>
+        </div>
+        <button type="button" class="drawer-close-btn" id="btn-close-drawer" aria-label="Close">×</button>
+      </div>
+
+      <div class="drawer-body">
+        <!-- Section: Data & Clipboard -->
+        <div class="drawer-section">
+          <h3 class="drawer-sec-title" id="lbl-sec-data">📋 الحافظة والبيانات</h3>
+          <div class="drawer-actions-grid">
+            <button type="button" class="drawer-btn drawer-btn-primary" id="btn-drawer-paste">
+              <span class="drawer-btn-icon">📋</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-drawer-paste">لصق في الخلية النشطة</strong>
+                <span class="drawer-btn-desc" id="desc-drawer-paste">لصق مباشر من إكسل أو الحافظة</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn" id="btn-quick-paste">
+              <span class="drawer-btn-icon">📝</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-quick-paste">مساعد اللصق والاستخراج الذكي</strong>
+                <span class="drawer-btn-desc" id="desc-quick-paste">لصق نصوص واتساب وتوزيعها تلقائياً</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn" id="btn-drawer-std">
+              <span class="drawer-btn-icon">⚡</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-drawer-std">توحيد أرقام الهواتف (+966)</strong>
+                <span class="drawer-btn-desc" id="desc-drawer-std">تعديل 05.. و 5.. و 011.. إلى الصيغة الدولية</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section: Sheet & Columns -->
+        <div class="drawer-section">
+          <h3 class="drawer-sec-title" id="lbl-sec-sheet">📊 إدارة الجدول والأعمدة</h3>
+          <div class="drawer-actions-grid">
+            <button type="button" class="drawer-btn" id="btn-drawer-add-row">
+              <span class="drawer-btn-icon">➕</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-drawer-add-row">إضافة صف جديد</strong>
+                <span class="drawer-btn-desc" id="desc-drawer-add-row">إدراج صف فارغ في نهاية الجدول</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn" id="btn-add-col">
+              <span class="drawer-btn-icon">📐</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-add-col">إضافة عمود مخصص</strong>
+                <span class="drawer-btn-desc" id="desc-add-col">إنشاء حقل جديد (مثل: القسم، اللقب)</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn" id="btn-toggle-empty">
+              <span class="drawer-btn-icon">👁️</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-toggle-empty">إخفاء الأعمدة الفارغة</strong>
+                <span class="drawer-btn-desc" id="desc-toggle-empty">طي الحقول التي لا تحتوي على بيانات</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn drawer-btn-danger" id="btn-purge-empty">
+              <span class="drawer-btn-icon">🗑️</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-purge-empty">حذف الأعمدة الفارغة</strong>
+                <span class="drawer-btn-desc" id="desc-purge-empty">إزالة الحقول غير المستخدمة نهائياً</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section: Files & Export -->
+        <div class="drawer-section">
+          <h3 class="drawer-sec-title" id="lbl-sec-actions">📁 الملفات والإجراءات</h3>
+          <div class="drawer-actions-grid">
+            <button type="button" class="drawer-btn" id="btn-open-import">
+              <span class="drawer-btn-icon">📥</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-import">استيراد ملف</strong>
+                <span class="drawer-btn-desc" id="desc-import">يدعم VCF 2.1/3.0/4.0, CSV, TSV</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn drawer-btn-primary" id="btn-drawer-export">
+              <span class="drawer-btn-icon">📤</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-drawer-export">تصدير جهات الاتصال</strong>
+                <span class="drawer-btn-desc" id="desc-drawer-export">VCF (UTF-8/QP), Google CSV, Outlook, JSON</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn" id="btn-sample-data">
+              <span class="drawer-btn-icon">🧪</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-sample-data">تحميل بيانات تجريبية</strong>
+                <span class="drawer-btn-desc" id="desc-sample-data">نماذج جهات اتصال واقعية للتجربة</span>
+              </div>
+            </button>
+            <button type="button" class="drawer-btn drawer-btn-danger" id="btn-clear-table">
+              <span class="drawer-btn-icon">⚠️</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-clear-table">مسح الجدول بالكامل</strong>
+                <span class="drawer-btn-desc" id="desc-clear-table">إعادة تعيين وبدء جدول فارغ جديد</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section: Language & Stats -->
+        <div class="drawer-section">
+          <h3 class="drawer-sec-title" id="lbl-sec-lang">🌐 اللغة والواجهة</h3>
+          <div class="drawer-actions-grid">
+            <button type="button" class="drawer-btn" id="btn-lang-toggle">
+              <span class="drawer-btn-icon">🌐</span>
+              <div class="drawer-btn-text">
+                <strong class="drawer-btn-label" id="txt-lang-toggle">English (LTR)</strong>
+                <span class="drawer-btn-desc" id="desc-lang-toggle">تبديل واجهة التطبيق إلى اللغة الإنجليزية</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="drawer-stats-card">
+            <div class="drawer-stat-row">
+              <span id="lbl-drawer-contacts">جهات الاتصال:</span>
+              <strong id="stat-drawer-contacts" class="drawer-stat-val">0</strong>
+            </div>
+            <div class="drawer-stat-row">
+              <span id="lbl-drawer-cols">الأعمدة النشطة:</span>
+              <strong id="stat-drawer-cols" class="drawer-stat-val">16</strong>
+            </div>
+            <div class="drawer-stat-row">
+              <span id="lbl-drawer-empty">الأعمدة الفارغة:</span>
+              <strong id="stat-drawer-empty" class="drawer-stat-val">16</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Formula & Cell Coordinate Bar -->
+    <div class="formula-bar">
+      <div class="cell-coordinate" id="cell-coord">الصف 1 : الاسم الأول</div>
+      <div class="formula-input-wrapper">
+        <span class="formula-fx">fx</span>
+        <input type="text" class="formula-input" id="formula-input" placeholder="محتوى الخلية..." spellcheck="false" dir="auto">
+      </div>
+      <button type="button" class="btn btn-sm btn-formula-paste" id="btn-formula-paste" title="لصق الحافظة في الخلية النشطة">
+        📋 لصق
+      </button>
+      <div class="dataset-stats">
+        <div class="stat-item">
+          <span id="lbl-stat-contacts">جهات الاتصال:</span>
+          <span class="stat-val" id="stat-contacts-count">0</span>
+        </div>
+        <div class="stat-item">
+          <span id="lbl-stat-columns">الأعمدة النشطة:</span>
+          <span class="stat-val" id="stat-columns-count">16</span>
+        </div>
+        <div class="stat-item">
+          <span id="lbl-stat-empty">الأعمدة الفارغة:</span>
+          <span class="stat-val" id="stat-empty-count">16</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Spreadsheet Grid Viewport -->
+    <main class="sheet-container" id="sheet-container"></main>
+
+    <!-- Footer Bar -->
+    <footer class="app-footer">
+      <div class="footer-left" id="footer-shortcuts">
+        <span>التحديد: <span class="kbd-shortcut">نقر وسحب</span> / <span class="kbd-shortcut">Shift+الأسهم</span></span>
+        <span>التعديل: <span class="kbd-shortcut">نقر مزدوج</span> أو بدء الكتابة</span>
+        <span>النسخ: <span class="kbd-shortcut">Ctrl+C</span></span>
+        <span>المسح: <span class="kbd-shortcut">Delete</span></span>
+        <span>التراجع: <span class="kbd-shortcut">Ctrl+Z / Y</span></span>
+        <span>اللصق: <span class="kbd-shortcut">Ctrl+V</span></span>
+      </div>
+      <div class="footer-right">
+        <span id="footer-status-text">جاهز</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Export Dialog Modal -->
+  <dialog id="export-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="export-modal-title">تصدير بيانات جهات الاتصال</h2>
+      <button type="button" class="modal-close-btn" id="btn-close-export" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" id="lbl-export-format">صيغة التصدير</label>
+        <div class="format-pill-group" id="export-format-pills">
+          <label class="format-pill active">
+            <input type="radio" name="exportFormat" value="vcf3" checked>
+            vCard 3.0 (UTF-8)
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="vcf-qp">
+            vCard (Quoted-Printable =D9=8A...)
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="vcf4">
+            vCard 4.0 (حديث)
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="google-csv">
+            Google Contacts CSV
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="outlook-csv">
+            Outlook CSV
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="clean-csv">
+            Standard CSV
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="tsv">
+            TSV (مفصول بمسافات)
+          </label>
+          <label class="format-pill">
+            <input type="radio" name="exportFormat" value="json">
+            JSON
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="qp-option-wrapper" style="margin-top: -6px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text-secondary);">
+          <input type="checkbox" id="chk-use-qp" style="accent-color: var(--accent); cursor: pointer;">
+          <span id="lbl-export-qp">ترميز الحروف العربية وغير اللاتينية بصيغة Quoted-Printable (<code>=D9=8A...</code> للهواتف القديمة وبلوتوث السيارات وOutlook)</span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="export-filename" id="lbl-export-filename">اسم الملف</label>
+        <input type="text" id="export-filename" class="formula-input" style="border: 1px solid var(--border-color); padding: 6px 10px; border-radius: 4px; background: white;" value="contacts.vcf" dir="ltr">
+      </div>
+
+      <div class="preview-container">
+        <div class="preview-header">
+          <span id="lbl-export-preview">معاينة مباشرة (تجاهل الحقول الفارغة تلقائياً)</span>
+          <span id="preview-meta">0 حرف</span>
+        </div>
+        <pre class="preview-box" id="export-preview" dir="ltr"></pre>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="btn-copy-export">نسخ للحافظة</button>
+      <button type="button" class="btn btn-primary" id="btn-download-export">تنزيل الملف</button>
+    </div>
+  </dialog>
+
+  <!-- Import Dialog Modal -->
+  <dialog id="import-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="import-modal-title">استيراد ملف جهات اتصال</h2>
+      <button type="button" class="modal-close-btn" id="btn-close-import" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="drop-zone" id="import-drop-zone">
+        <svg style="width: 32px; height: 32px; stroke: #64748b; fill: none; stroke-width: 2;" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <div class="drop-zone-text" id="import-drop-text">اضغط أو اسحب ملفاً هنا للاستيراد</div>
+        <div class="drop-zone-hint" id="import-drop-hint">يدعم صيغ .vcf (vCard) و .csv و .tsv</div>
+        <input type="file" id="file-input" accept=".vcf,.csv,.tsv,text/vcard,text/csv,text/tab-separated-values" style="display: none;">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="btn-cancel-import">إلغاء</button>
+    </div>
+  </dialog>
+
+  <!-- Add Column Modal -->
+  <dialog id="col-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="col-modal-title">إضافة عمود جديد</h2>
+      <button type="button" class="modal-close-btn" id="btn-close-col" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="new-col-name" id="lbl-col-name">اسم العمود</label>
+        <input type="text" id="new-col-name" class="formula-input" style="border: 1px solid var(--border-color); padding: 6px 10px; border-radius: 4px; background: white;" placeholder="مثال: اللقب، القسم، تيليجرام" autofocus dir="auto">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="btn-cancel-col">إلغاء</button>
+      <button type="button" class="btn btn-primary" id="btn-confirm-col">إنشاء العمود</button>
+    </div>
+  </dialog>
+
+  <!-- Quick Paste & Smart Extraction Modal (Mobile / Excel Assistant) -->
+  <dialog id="quick-paste-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="quick-paste-title">لصق واستخراج سريع للبيانات (مساعد الجوال)</h2>
+      <button type="button" class="modal-close-btn" id="btn-close-quick-paste" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc" id="quick-paste-desc">
+        مخصص لمستخدمي الجوال وإكسل: الصق أي نص يحتوي على أسماء وأرقام (من إكسل، جداول جوجل، واتساب، أو الملاحظات) وسيقوم النظام باستخراجها وتوحيدها وتوزيعها تلقائياً.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label" for="quick-paste-input" id="lbl-quick-paste-input">النص المنسوخ</label>
+        <textarea id="quick-paste-input" class="quick-paste-textarea" rows="6" placeholder="الصق النص المنسوخ هنا...&#10;مثال 1 (إكسل): الاسم [تاب/مسافة] 0501234567&#10;مثال 2 (واتساب): فلان - 055 555 5555&#10;مثال 3 (هاتف أرضي): الشركة 011 456 7890" dir="auto"></textarea>
+      </div>
+
+      <div class="quick-paste-options">
+        <label class="checkbox-label">
+          <input type="checkbox" id="quick-paste-autostd" checked>
+          <span id="lbl-quick-paste-autostd">توحيد أرقام الهواتف السعودية تلقائياً (+966)</span>
+        </label>
+
+        <div class="radio-group-inline">
+          <label class="radio-label">
+            <input type="radio" name="quickPasteMode" value="replace" checked>
+            <span id="lbl-quick-paste-replace">استبدال الجدول بالكامل</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="quickPasteMode" value="append">
+            <span id="lbl-quick-paste-append">إضافة إلى الجدول الحالي</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="preview-container" id="quick-paste-preview-section">
+        <div class="preview-header">
+          <span id="lbl-quick-paste-preview">المعاينة المستخرجة</span>
+          <span id="quick-paste-count" class="preview-meta">0 جهة اتصال مستخرجة</span>
+        </div>
+        <div class="quick-paste-preview-box" id="quick-paste-preview">
+          <div class="quick-paste-empty-hint" id="quick-paste-empty-hint">الصق نصاً في المربع أعلاه لاستخراج البيانات ومعاينتها فوراً...</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="btn-cancel-quick-paste">إلغاء</button>
+      <button type="button" class="btn btn-primary" id="btn-apply-quick-paste" disabled>تطبيق وإدراج في الجدول</button>
+    </div>
+  </dialog>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- App Entry Point -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
