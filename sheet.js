@@ -62,19 +62,20 @@ export class ContactSheet {
         </table>
         <div class="cell-floating-toolbar" id="cell-floating-toolbar" style="display: none;">
           <button type="button" class="cft-btn cft-paste" data-action="cell-paste" title="لصق البيانات من الحافظة في هذه الخلية">
-            📋 <span class="cft-label">${t.cellMenuPaste || 'لصق'}</span>
+            <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+            <span class="cft-label">${t.cellMenuPaste || 'لصق'}</span>
           </button>
           <button type="button" class="cft-btn" data-action="cell-copy" title="نسخ محتوى الخلية">
-            📄 <span class="cft-label">${t.cellMenuCopy || 'نسخ'}</span>
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span class="cft-label">${t.cellMenuCopy || 'نسخ'}</span>
           </button>
           <button type="button" class="cft-btn" data-action="cell-edit" title="تعديل الخلية">
-            ✏️ <span class="cft-label">${t.cellMenuEdit || 'تعديل'}</span>
-          </button>
-          <button type="button" class="cft-btn" data-action="cell-std" title="توحيد الرقم السعودي (+966)">
-            ⚡ <span class="cft-label">+966</span>
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            <span class="cft-label">${t.cellMenuEdit || 'تعديل'}</span>
           </button>
           <button type="button" class="cft-btn cft-danger" data-action="cell-clear" title="مسح محتوى الخلية">
-            🗑️ <span class="cft-label">${t.cellMenuClear || 'مسح'}</span>
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span class="cft-label">${t.cellMenuClear || 'مسح'}</span>
           </button>
         </div>
       </div>
@@ -90,7 +91,14 @@ export class ContactSheet {
   /**
    * Loads initial rows or sets default empty rows.
    */
-  loadData(contacts = []) {
+  loadData(contacts = [], hiddenColumnIds = []) {
+    this.columns = getLocalizedColumns(this.lang);
+    if (hiddenColumnIds && Array.isArray(hiddenColumnIds)) {
+      this.hiddenColumnIds = new Set(hiddenColumnIds);
+    } else {
+      this.hiddenColumnIds.clear();
+    }
+
     if (contacts.length === 0) {
       // Create 8 empty rows for quick entry
       this.rows = Array.from({ length: 8 }, () => this.createEmptyRow());
@@ -101,20 +109,6 @@ export class ContactSheet {
         if (row.phoneWork) row.phoneWork = standardizeSaudiPhone(row.phoneWork);
         return row;
       });
-    }
-
-    // Check if imported contacts have any unknown columns and add them
-    const existingColIds = new Set(this.columns.map(c => c.id));
-    for (const row of this.rows) {
-      for (const key of Object.keys(row)) {
-        if (!key.startsWith('_') && !existingColIds.has(key)) {
-          this.columns.push({
-            id: key,
-            label: this.formatColumnLabel(key)
-          });
-          existingColIds.add(key);
-        }
-      }
     }
 
     this.selectionAnchor = { row: 0, col: 0 };
@@ -211,7 +205,6 @@ export class ContactSheet {
 
   renderHeader() {
     const visibleCols = this.getVisibleColumns();
-    const addColText = this.lang === 'ar' ? '+ إضافة عمود' : '+ Add Column';
     let thHtml = `
       <tr>
         <th class="sheet-corner-cell">
@@ -234,9 +227,6 @@ export class ContactSheet {
     }
 
     thHtml += `
-        <th class="sheet-add-col-header">
-          <button type="button" class="add-col-btn" id="btn-add-col-header" title="${addColText}">${addColText}</button>
-        </th>
       </tr>
     `;
 
@@ -745,31 +735,9 @@ export class ContactSheet {
     this.render();
   }
 
-  addColumn(label) {
-    const cleanLabel = (label || '').trim();
-    if (!cleanLabel) return;
-
-    let baseId = cleanLabel.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!baseId) baseId = 'col';
-    let id = baseId;
-    let counter = 1;
-    while (this.columns.some(c => c.id === id)) {
-      id = `${baseId}_${counter++}`;
-    }
-
-    this.columns.push({ id, label: cleanLabel });
-    for (const r of this.rows) {
-      r[id] = '';
-    }
-
-    this.saveHistory(`Add Column ${cleanLabel}`);
-    this.render();
-  }
-
-  deleteColumn(colId) {
+  hideColumn(colId) {
     if (this.columns.length <= 1) return;
-    this.columns = this.columns.filter(c => c.id !== colId);
-    this.hiddenColumnIds.delete(colId);
+    this.hiddenColumnIds.add(colId);
 
     const visibleCols = this.getVisibleColumns();
     if (this.activeColIdx >= visibleCols.length) {
@@ -778,17 +746,18 @@ export class ContactSheet {
     this.selectionAnchor = { row: this.activeRowIdx, col: this.activeColIdx };
     this.selectionFocus = { row: this.activeRowIdx, col: this.activeColIdx };
 
-    this.saveHistory('Delete Column');
+    this.saveHistory('Hide Column');
     this.render();
   }
 
-  renameColumn(colId, newLabel) {
-    const col = this.columns.find(c => c.id === colId);
-    if (col && newLabel && newLabel.trim()) {
-      col.label = newLabel.trim();
-      this.saveHistory('Rename Column');
-      this.render();
-    }
+  restoreAllColumns() {
+    const count = this.hiddenColumnIds.size;
+    if (count === 0) return 0;
+
+    this.hiddenColumnIds.clear();
+    this.saveHistory('Restore Columns');
+    this.render();
+    return count;
   }
 
   clearColumnValues(colId) {
@@ -835,25 +804,6 @@ export class ContactSheet {
       count: emptyIds.length,
       areHidden: !allHidden
     };
-  }
-
-  purgeEmptyColumns() {
-    const emptyIds = this.getEmptyColumnIds();
-    if (emptyIds.length === 0) return 0;
-
-    this.columns = this.columns.filter(c => !emptyIds.includes(c.id));
-    emptyIds.forEach(id => this.hiddenColumnIds.delete(id));
-
-    const visibleCols = this.getVisibleColumns();
-    if (this.activeColIdx >= visibleCols.length) {
-      this.activeColIdx = Math.max(0, visibleCols.length - 1);
-    }
-    this.selectionAnchor = { row: this.activeRowIdx, col: this.activeColIdx };
-    this.selectionFocus = { row: this.activeRowIdx, col: this.activeColIdx };
-
-    this.saveHistory('Purge Empty Columns');
-    this.render();
-    return emptyIds.length;
   }
 
   handlePaste(text) {
@@ -953,7 +903,8 @@ export class ContactSheet {
       activeContactsCount: activeContacts.length,
       totalColumns: this.columns.length,
       visibleColumnsCount: visibleCols.length,
-      emptyColumnsCount: this.getEmptyColumnIds().length
+      emptyColumnsCount: this.getEmptyColumnIds().length,
+      hiddenColumnsCount: this.hiddenColumnIds.size
     });
   }
 
@@ -973,17 +924,6 @@ export class ContactSheet {
           this.copySelectedRangeToClipboard();
         } else if (action === 'cell-edit') {
           this.startEditing();
-        } else if (action === 'cell-std') {
-          const visibleCols = this.getVisibleColumns();
-          const col = visibleCols[this.activeColIdx];
-          if (col && this.rows[this.activeRowIdx]) {
-            const raw = this.rows[this.activeRowIdx][col.id];
-            if (raw) {
-              this.rows[this.activeRowIdx][col.id] = standardizeSaudiPhone(raw);
-              this.saveHistory('Standardize Phone');
-              this.render();
-            }
-          }
         } else if (action === 'cell-clear') {
           this.clearSelectedRange();
         }
@@ -1208,13 +1148,6 @@ export class ContactSheet {
     });
 
     this.thead.addEventListener('click', (e) => {
-      if (e.target.id === 'btn-add-col-header') {
-        const promptText = this.lang === 'ar' ? 'أدخل اسم العمود الجديد:' : 'Enter new column name:';
-        const name = prompt(promptText);
-        if (name) this.addColumn(name);
-        return;
-      }
-
       const menuBtn = e.target.closest('[data-action="col-menu"]');
       if (menuBtn) {
         const th = menuBtn.closest('th.sheet-col-header');
@@ -1361,15 +1294,11 @@ export class ContactSheet {
     );
 
     if (choice === '1') {
-      const newName = prompt(t.colRenamePrompt, col.label);
-      if (newName) this.renameColumn(colId, newName);
+      this.hideColumn(colId);
+      this.onToast(this.lang === 'ar' ? `تم إخفاء عمود "${col.label}"` : `Hidden column "${col.label}"`);
     } else if (choice === '2') {
       if (confirm(t.colClearConfirm.replace('{label}', col.label))) {
         this.clearColumnValues(colId);
-      }
-    } else if (choice === '3') {
-      if (confirm(t.colDeleteConfirm.replace('{label}', col.label))) {
-        this.deleteColumn(colId);
       }
     }
   }

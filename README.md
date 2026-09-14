@@ -48,8 +48,8 @@ Older contact readers (Microsoft Outlook, feature phones, car Bluetooth infotain
 
 ### 6. Mobile Phone UX & Tools Sidebar Drawer
 - **Unified Spreadsheet Viewport**: The core tabular grid is identical across desktop and smartphones with smooth native touch scrolling.
-- **Slide-Out Sidebar Drawer (`الأدوات ☰`)**: All management tools (column customization, hiding/purging empty fields, sample datasets, reset, and language switcher) are accessible via a clean, slide-out sidebar drawer.
-- **1-Tap Quick Actions**: Header bar includes direct 1-tap buttons for pasting directly into active cells (`📋 لصق`), adding rows (`+ صف`), Saudi phone standardization (`⚡ +966`), and exporting (`📤 تصدير`).
+- **Slide-Out Sidebar Drawer (`الأدوات`)**: All management tools (column customization, hiding/purging empty fields, sample datasets, reset, and language switcher) are accessible via a clean, slide-out sidebar drawer.
+- **1-Tap Quick Actions**: Header bar includes direct 1-tap buttons for adding rows (`إضافة صف`), clearing the sheet (`مسح الكل`), and exporting (`تصدير`), with immediate cell paste right in the formula bar.
 - **Touch Selection & Action Menu**: Long-press on any cell to open floating options (Copy, Paste, Clear, Delete Row).
 
 ### 7. Quick Paste & Smart Extraction (Mobile & Spreadsheet Assistant)

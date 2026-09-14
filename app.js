@@ -87,6 +87,248 @@ const SAMPLE_CONTACTS = [
   }
 ];
 
+// Platform & Device Detection Helper
+function detectUserPlatform(lang = 'ar') {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  let recommendedFormat = 'vcf3';
+  let deviceName = 'الكمبيوتر';
+  let desc = 'vCard 3.0 (UTF-8) الصيغة القياسية الأكثر توافقاً';
+
+  if (isIOS) {
+    recommendedFormat = 'vcf3';
+    deviceName = 'iPhone / iOS';
+    desc = lang === 'ar' ? 'vCard 3.0 (UTF-8) لجهات اتصال آيفون ونظام Apple' : 'vCard 3.0 (UTF-8) for Apple iPhone & iOS';
+  } else if (isAndroid) {
+    recommendedFormat = 'vcf4';
+    deviceName = 'Android';
+    desc = lang === 'ar' ? 'vCard 4.0 المتطورة لأجهزة وهواتف أندرويد' : 'vCard 4.0 for modern Android devices';
+  } else {
+    deviceName = lang === 'ar' ? 'الكمبيوتر' : 'Desktop';
+    desc = lang === 'ar' ? 'vCard 3.0 (UTF-8) متوافقة مع كافة الأنظمة' : 'vCard 3.0 (UTF-8) widely compatible';
+  }
+
+  return { isIOS, isAndroid, recommendedFormat, deviceName, desc };
+}
+
+// Multi-Sheet & Local Autosave Manager
+const STORAGE_KEY = 'vcf_creator_sheets_v2';
+
+class SheetManager {
+  constructor(sheetInstance) {
+    this.sheet = sheetInstance;
+    this.saveTimer = null;
+    this.state = this.loadState();
+  }
+
+  loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.sheets) && parsed.sheets.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load saved sheets:', e);
+    }
+
+    const defaultId = 'sheet_' + Date.now();
+    return {
+      activeSheetId: defaultId,
+      sheets: [
+        {
+          id: defaultId,
+          name: 'جهات الاتصال الرئيسية',
+          rows: SAMPLE_CONTACTS,
+          hiddenColumnIds: []
+        }
+      ]
+    };
+  }
+
+  saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      this.flashAutosave();
+    } catch (e) {
+      console.warn('Failed to save sheets state:', e);
+    }
+  }
+
+  flashAutosave() {
+    const badge = document.getElementById('autosave-status');
+    if (badge) {
+      badge.classList.add('saved');
+      setTimeout(() => badge.classList.remove('saved'), 1600);
+    }
+  }
+
+  getActive() {
+    return this.state.sheets.find(s => s.id === this.state.activeSheetId) || this.state.sheets[0];
+  }
+
+  init() {
+    const active = this.getActive();
+    this.sheet.loadData(active.rows || [], active.hiddenColumnIds || []);
+    this.renderTabs();
+  }
+
+  renderTabs() {
+    const tabList = document.getElementById('sheets-tab-list');
+    if (!tabList) return;
+    tabList.innerHTML = '';
+
+    this.state.sheets.forEach(s => {
+      const tab = document.createElement('div');
+      tab.className = 'sheet-tab' + (s.id === this.state.activeSheetId ? ' active' : '');
+      tab.dataset.sheetId = s.id;
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'sheet-tab-title';
+      titleSpan.textContent = s.name;
+      titleSpan.title = s.name;
+      tab.appendChild(titleSpan);
+
+      const actionsBtn = document.createElement('button');
+      actionsBtn.type = 'button';
+      actionsBtn.className = 'sheet-tab-action-btn';
+      actionsBtn.textContent = '⋮';
+      actionsBtn.title = 'خيارات الورقة';
+      actionsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.showSheetMenu(s.id);
+      });
+      tab.appendChild(actionsBtn);
+
+      tab.addEventListener('click', () => {
+        this.switchSheet(s.id);
+      });
+
+      tabList.appendChild(tab);
+    });
+  }
+
+  saveCurrentImmediate() {
+    const active = this.getActive();
+    if (active) {
+      active.rows = this.sheet.getContacts();
+      active.hiddenColumnIds = Array.from(this.sheet.hiddenColumnIds);
+      this.saveState();
+    }
+  }
+
+  debounceSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.saveCurrentImmediate();
+    }, 350);
+  }
+
+  switchSheet(targetId) {
+    if (targetId === this.state.activeSheetId) return;
+    this.saveCurrentImmediate();
+
+    const target = this.state.sheets.find(s => s.id === targetId);
+    if (target) {
+      this.state.activeSheetId = targetId;
+      this.sheet.loadData(target.rows || [], target.hiddenColumnIds || []);
+      this.renderTabs();
+      this.saveState();
+    }
+  }
+
+  addSheet(name) {
+    this.saveCurrentImmediate();
+    const num = this.state.sheets.length + 1;
+    const defaultName = `ورقة ${num}`;
+    const sheetName = (name && name.trim()) ? name.trim() : defaultName;
+    const newId = 'sheet_' + Date.now();
+
+    const newSheet = {
+      id: newId,
+      name: sheetName,
+      rows: [],
+      hiddenColumnIds: []
+    };
+
+    this.state.sheets.push(newSheet);
+    this.state.activeSheetId = newId;
+    this.sheet.loadData([], []);
+    this.renderTabs();
+    this.saveState();
+  }
+
+  renameSheet(sheetId, newName) {
+    const target = this.state.sheets.find(s => s.id === sheetId);
+    if (target && newName && newName.trim()) {
+      target.name = newName.trim();
+      this.renderTabs();
+      this.saveState();
+    }
+  }
+
+  deleteSheet(sheetId) {
+    if (this.state.sheets.length <= 1) {
+      alert('لا يمكن حذف الورقة الوحيدة في الملف');
+      return;
+    }
+    const target = this.state.sheets.find(s => s.id === sheetId);
+    if (!target) return;
+
+    this.state.sheets = this.state.sheets.filter(s => s.id !== sheetId);
+    if (this.state.activeSheetId === sheetId) {
+      this.state.activeSheetId = this.state.sheets[0].id;
+      const nextActive = this.state.sheets[0];
+      this.sheet.loadData(nextActive.rows || [], nextActive.hiddenColumnIds || []);
+    }
+    this.renderTabs();
+    this.saveState();
+  }
+
+  showSheetMenu(sheetId) {
+    const target = this.state.sheets.find(s => s.id === sheetId);
+    if (!target) return;
+
+    const choice = prompt(
+      `الورقة: "${target.name}"\n1: إعادة تسمية الورقة\n2: حذف الورقة\n3: نسخ / تكرار الورقة\n4: إلغاء`,
+      '1'
+    );
+
+    if (choice === '1') {
+      const newName = prompt('أدخل الاسم الجديد للورقة:', target.name);
+      if (newName) this.renameSheet(sheetId, newName);
+    } else if (choice === '2') {
+      if (confirm(`هل أنت متأكد من حذف ورقة "${target.name}"؟`)) {
+        this.deleteSheet(sheetId);
+      }
+    } else if (choice === '3') {
+      this.duplicateSheet(sheetId);
+    }
+  }
+
+  duplicateSheet(sheetId) {
+    const target = this.state.sheets.find(s => s.id === sheetId);
+    if (!target) return;
+    this.saveCurrentImmediate();
+    const copyId = 'sheet_' + Date.now();
+    const copyName = `${target.name} (نسخة)`;
+    const copySheet = {
+      id: copyId,
+      name: copyName,
+      rows: JSON.parse(JSON.stringify(target.rows || [])),
+      hiddenColumnIds: [...(target.hiddenColumnIds || [])]
+    };
+    this.state.sheets.push(copySheet);
+    this.state.activeSheetId = copyId;
+    this.sheet.loadData(copySheet.rows, copySheet.hiddenColumnIds);
+    this.renderTabs();
+    this.saveState();
+  }
+}
+
 // Application Bootstrap
 document.addEventListener('DOMContentLoaded', () => {
   let currentLang = localStorage.getItem('vcf_creator_lang') || 'ar';
@@ -103,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Modals, Drawer & Controls
   const exportModal = document.getElementById('export-modal');
   const importModal = document.getElementById('import-modal');
-  const colModal = document.getElementById('col-modal');
   const quickPasteModal = document.getElementById('quick-paste-modal');
 
   const btnToggleDrawer = document.getElementById('btn-toggle-drawer');
@@ -111,12 +352,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const drawerOverlay = document.getElementById('drawer-overlay');
 
   const btnPasteToCell = document.getElementById('btn-paste-to-cell');
-  const btnDrawerPaste = document.getElementById('btn-drawer-paste');
   const btnFormulaPaste = document.getElementById('btn-formula-paste');
-  const btnStandardizePhones = document.getElementById('btn-standardize-phones');
-  const btnDrawerStd = document.getElementById('btn-drawer-std');
   const btnDrawerAddRow = document.getElementById('btn-drawer-add-row');
   const btnDrawerExport = document.getElementById('btn-drawer-export');
+  const btnClearTableTop = document.getElementById('btn-clear-table-top');
+  const btnRestoreHiddenCols = document.getElementById('btn-restore-hidden-cols');
+  const btnDrawerRestoreCols = document.getElementById('btn-drawer-restore-cols');
+  const btnNewSheet = document.getElementById('btn-new-sheet');
 
   const btnQuickPaste = document.getElementById('btn-quick-paste');
   const btnCloseQuickPaste = document.getElementById('btn-close-quick-paste');
@@ -153,6 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
       closeDrawer();
     }
   });
+
+  let sheetManager = null;
 
   // Initialize Spreadsheet Grid with active language
   const sheet = new ContactSheet(container, {
@@ -192,12 +436,29 @@ document.addEventListener('DOMContentLoaded', () => {
         .replace('{rows}', stats.totalRows)
         .replace('{cols}', stats.visibleColumnsCount)
         .replace('{empty}', stats.emptyColumnsCount);
+
+      // Restore hidden columns button visibility
+      if (btnRestoreHiddenCols) {
+        const txtRestore = document.getElementById('txt-restore-hidden');
+        if (stats.hiddenColumnsCount > 0) {
+          btnRestoreHiddenCols.style.display = 'inline-flex';
+          if (txtRestore) txtRestore.textContent = (dict.btnRestoreHidden || 'إرجاع الأعمدة ({count})').replace('{count}', stats.hiddenColumnsCount);
+        } else {
+          btnRestoreHiddenCols.style.display = 'none';
+        }
+      }
+
+      // Autosave to localStorage
+      if (sheetManager) {
+        sheetManager.debounceSave();
+      }
     },
     onToast: (msg) => showToast(msg)
   });
 
-  // Load Initial Data (Sample Contacts by default)
-  sheet.loadData(SAMPLE_CONTACTS);
+  // Initialize Sheet Manager with Local Storage Autosave
+  sheetManager = new SheetManager(sheet);
+  sheetManager.init();
 
   // Update UI Language & Direction
   function applyLanguage(lang) {
@@ -222,20 +483,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const txtAddRow = document.getElementById('txt-add-row');
     if (txtAddRow) txtAddRow.textContent = dict.btnAddRow;
 
-    const txtAddCol = document.getElementById('txt-add-col');
-    if (txtAddCol) txtAddCol.textContent = dict.btnAddCol;
+    const txtClearTop = document.getElementById('txt-clear-table-top');
+    if (txtClearTop) txtClearTop.textContent = dict.btnClearAllTop || 'مسح الكل';
 
     const txtToggleEmpty = document.getElementById('txt-toggle-empty');
     if (txtToggleEmpty) txtToggleEmpty.textContent = dict.btnHideEmpty;
 
-    const txtPurgeEmpty = document.getElementById('txt-purge-empty');
-    if (txtPurgeEmpty) txtPurgeEmpty.textContent = dict.btnPurgeEmpty;
-
     const txtSampleData = document.getElementById('txt-sample-data');
     if (txtSampleData) txtSampleData.textContent = dict.btnSampleData;
-
-    const txtClearTable = document.getElementById('txt-clear-table');
-    if (txtClearTable) txtClearTable.textContent = dict.btnClearTable;
 
     const txtImport = document.getElementById('txt-import');
     if (txtImport) txtImport.textContent = dict.btnImport;
@@ -243,12 +498,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const txtExport = document.getElementById('txt-export');
     if (txtExport) txtExport.textContent = dict.btnExport;
 
-    // Header & Drawer Action Labels
-    const txtPasteToCell = document.getElementById('txt-paste-to-cell');
-    if (txtPasteToCell) txtPasteToCell.textContent = dict.btnPasteToCell || 'لصق 📋';
+    const txtNewSheet = document.getElementById('txt-new-sheet');
+    if (txtNewSheet) txtNewSheet.textContent = dict.btnNewSheet || '+ ورقة جديدة';
 
-    const txtDrawerPaste = document.getElementById('txt-drawer-paste');
-    if (txtDrawerPaste) txtDrawerPaste.textContent = dict.drawerPasteLabel || 'لصق في الخلية النشطة';
+    const txtAutosaveStatus = document.getElementById('txt-autosave-status');
+    if (txtAutosaveStatus) txtAutosaveStatus.textContent = dict.autosavedBadge || 'تم الحفظ تلقائياً';
+
+    const txtDrawerRestoreCols = document.getElementById('txt-drawer-restore-cols');
+    if (txtDrawerRestoreCols) txtDrawerRestoreCols.textContent = dict.drawerRestoreCols || 'إرجاع كافة الأعمدة المخفية';
+
+    // Header & Drawer Action Labels
+    const txtFormulaPaste = document.getElementById('txt-formula-paste');
+    if (txtFormulaPaste) txtFormulaPaste.textContent = dict.btnFormulaPaste || 'لصق';
 
     const txtDrawerAddRow = document.getElementById('txt-drawer-add-row');
     if (txtDrawerAddRow) txtDrawerAddRow.textContent = dict.btnAddRow;
@@ -256,14 +517,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const txtDrawerExport = document.getElementById('txt-drawer-export');
     if (txtDrawerExport) txtDrawerExport.textContent = dict.btnExport;
 
-    const txtDrawerStd = document.getElementById('txt-drawer-std');
-    if (txtDrawerStd) txtDrawerStd.textContent = dict.btnStandardizePhones;
-
     const txtQuickPaste = document.getElementById('txt-quick-paste');
     if (txtQuickPaste) txtQuickPaste.textContent = dict.quickPasteTitle || 'مساعد اللصق والاستخراج';
-
-    const txtStd = document.getElementById('txt-standardize-phones');
-    if (txtStd) txtStd.textContent = '+966 ⚡';
 
     // Drawer Section Headers & Descriptions
     const drawerTitle = document.getElementById('drawer-title');
@@ -281,26 +536,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const lblSecLang = document.getElementById('lbl-sec-lang');
     if (lblSecLang) lblSecLang.textContent = dict.lblSecLang;
 
-    const descDrawerPaste = document.getElementById('desc-drawer-paste');
-    if (descDrawerPaste) descDrawerPaste.textContent = dict.drawerPasteDesc;
-
     const descQuickPaste = document.getElementById('desc-quick-paste');
     if (descQuickPaste) descQuickPaste.textContent = dict.drawerQuickPasteDesc;
-
-    const descDrawerStd = document.getElementById('desc-drawer-std');
-    if (descDrawerStd) descDrawerStd.textContent = dict.drawerStdDesc;
 
     const descDrawerAddRow = document.getElementById('desc-drawer-add-row');
     if (descDrawerAddRow) descDrawerAddRow.textContent = dict.drawerAddRowDesc;
 
-    const descAddCol = document.getElementById('desc-add-col');
-    if (descAddCol) descAddCol.textContent = dict.drawerAddColDesc;
-
     const descToggleEmpty = document.getElementById('desc-toggle-empty');
     if (descToggleEmpty) descToggleEmpty.textContent = dict.drawerHideEmptyDesc;
-
-    const descPurgeEmpty = document.getElementById('desc-purge-empty');
-    if (descPurgeEmpty) descPurgeEmpty.textContent = dict.drawerPurgeEmptyDesc;
 
     const descImport = document.getElementById('desc-import');
     if (descImport) descImport.textContent = dict.drawerImportDesc;
@@ -310,9 +553,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const descSampleData = document.getElementById('desc-sample-data');
     if (descSampleData) descSampleData.textContent = dict.drawerSampleDesc;
-
-    const descClearTable = document.getElementById('desc-clear-table');
-    if (descClearTable) descClearTable.textContent = dict.drawerClearDesc;
 
     const descLangToggle = document.getElementById('desc-lang-toggle');
     if (descLangToggle) descLangToggle.textContent = dict.drawerLangDesc;
@@ -362,28 +602,45 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('lbl-quick-paste-append').textContent = dict.quickPasteOptAppend;
     document.getElementById('lbl-quick-paste-preview').textContent = dict.quickPastePreviewTitle;
     document.getElementById('btn-apply-quick-paste').textContent = dict.quickPasteBtnApply;
-    document.getElementById('btn-cancel-quick-paste').textContent = dict.colModalCancel;
+    document.getElementById('btn-cancel-quick-paste').textContent = dict.importCancel;
 
-    document.getElementById('export-modal-title').textContent = dict.exportModalTitle;
-    document.getElementById('lbl-export-format').textContent = dict.exportFormatLabel;
-    document.getElementById('lbl-export-filename').textContent = dict.exportFilenameLabel;
-    document.getElementById('lbl-export-preview').textContent = dict.exportPreviewHeader;
-    document.getElementById('btn-copy-export').textContent = dict.exportBtnCopy;
-    document.getElementById('btn-download-export').textContent = dict.exportBtnDownload;
-    document.getElementById('lbl-export-qp').innerHTML = dict.exportQpOption.replace('(=D9=8A...', '(<code>=D9=8A...</code>');
+    // Export Modal Strings
+    const exportModalTitle = document.getElementById('export-modal-title');
+    if (exportModalTitle) exportModalTitle.textContent = dict.exportModalTitle;
+    const lblExportFormat = document.getElementById('lbl-export-format');
+    if (lblExportFormat) lblExportFormat.textContent = dict.exportFormatLabel;
+    const lblExportFilename = document.getElementById('lbl-export-filename');
+    if (lblExportFilename) lblExportFilename.textContent = dict.exportFilenameLabel;
+    const lblExportPreview = document.getElementById('lbl-export-preview');
+    if (lblExportPreview) lblExportPreview.textContent = dict.exportPreviewHeader;
+    const txtCopyExport = document.getElementById('txt-copy-export');
+    if (txtCopyExport) {
+      txtCopyExport.textContent = dict.exportBtnCopy;
+    } else {
+      const btnCopy = document.getElementById('btn-copy-export');
+      if (btnCopy) btnCopy.textContent = dict.exportBtnCopy;
+    }
+    const txtDownloadExport = document.getElementById('txt-download-export');
+    if (txtDownloadExport) txtDownloadExport.textContent = dict.exportBtnDownload;
+    const txtShareExport = document.getElementById('txt-share-export');
+    if (txtShareExport) txtShareExport.textContent = dict.exportShareBtn;
+    const txtExportIosTip = document.getElementById('txt-export-ios-tip');
+    if (txtExportIosTip) txtExportIosTip.textContent = dict.exportIosTip;
+    const lblExportQp = document.getElementById('lbl-export-qp');
+    if (lblExportQp) lblExportQp.innerHTML = dict.exportQpOption.replace('(=D9=8A...', '(<code>=D9=8A...</code>');
+    const badgeRecommended = document.getElementById('badge-recommended');
+    if (badgeRecommended) badgeRecommended.textContent = lang === 'ar' ? 'موصى به' : 'Recommended';
 
+    // Import Modal Strings
     document.getElementById('import-modal-title').textContent = dict.importModalTitle;
     document.getElementById('import-drop-text').textContent = dict.importDropText;
     document.getElementById('import-drop-hint').textContent = dict.importDropHint;
     document.getElementById('btn-cancel-import').textContent = dict.importCancel;
 
-    document.getElementById('col-modal-title').textContent = dict.colModalTitle;
-    document.getElementById('lbl-col-name').textContent = dict.colModalLabel;
-    document.getElementById('new-col-name').placeholder = dict.colModalPlaceholder;
-    document.getElementById('btn-cancel-col').textContent = dict.colModalCancel;
-    document.getElementById('btn-confirm-col').textContent = dict.colModalConfirm;
-
     sheet.setLanguage(lang);
+    if (sheetManager) {
+      sheetManager.renderTabs();
+    }
     updateExportPreview();
   }
 
@@ -404,16 +661,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Direct 1-Tap Paste to Cell Buttons (Header, Drawer & Formula Bar)
+  // Direct 1-Tap Paste to Cell Buttons (Header & Formula Bar)
   if (btnPasteToCell) {
     btnPasteToCell.addEventListener('click', () => {
-      sheet.pasteFromClipboard();
-    });
-  }
-
-  if (btnDrawerPaste) {
-    btnDrawerPaste.addEventListener('click', () => {
-      closeDrawer();
       sheet.pasteFromClipboard();
     });
   }
@@ -437,26 +687,49 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  document.getElementById('btn-add-col').addEventListener('click', () => {
-    closeDrawer();
-    colModal.showModal();
-    const input = document.getElementById('new-col-name');
-    input.value = '';
-    input.focus();
-  });
+  // Clear Sheet Top Button (with confirmation)
+  if (btnClearTableTop) {
+    btnClearTableTop.addEventListener('click', () => {
+      const confirmMsg = t('confirmClearSheet') || (currentLang === 'ar' ? 'هل أنت متأكد من مسح كافة البيانات في هذه الورقة؟' : 'Clear all data in this sheet?');
+      if (confirm(confirmMsg)) {
+        sheet.clearAllRows();
+        sheetManager.saveCurrentImmediate();
+        showToast(t('toastReset'));
+      }
+    });
+  }
 
-  document.getElementById('btn-confirm-col').addEventListener('click', () => {
-    const input = document.getElementById('new-col-name');
-    const name = input.value.trim();
-    if (name) {
-      sheet.addColumn(name);
-      colModal.close();
-      showToast(t('toastColCreated').replace('{name}', name));
+  // Restore Hidden Columns Handlers
+  function handleRestoreHidden() {
+    const count = sheet.restoreAllColumns();
+    if (count > 0) {
+      showToast(t('toastUnhiddenEmpty'));
+      sheetManager.debounceSave();
+    } else {
+      showToast(t('toastNoEmpty'));
     }
-  });
+  }
 
-  document.getElementById('btn-cancel-col').addEventListener('click', () => colModal.close());
-  document.getElementById('btn-close-col').addEventListener('click', () => colModal.close());
+  if (btnRestoreHiddenCols) {
+    btnRestoreHiddenCols.addEventListener('click', handleRestoreHidden);
+  }
+  if (btnDrawerRestoreCols) {
+    btnDrawerRestoreCols.addEventListener('click', () => {
+      closeDrawer();
+      handleRestoreHidden();
+    });
+  }
+
+  // New Sheet Button
+  if (btnNewSheet) {
+    btnNewSheet.addEventListener('click', () => {
+      const promptText = t('sheetPromptNew') || (currentLang === 'ar' ? 'أدخل اسم الورقة أو الملف الجديد:' : 'Enter new sheet name:');
+      const name = prompt(promptText);
+      if (name !== null) {
+        sheetManager.addSheet(name);
+      }
+    });
+  }
 
   // Toggle Hide Empty Columns
   const btnToggleEmpty = document.getElementById('btn-toggle-empty');
@@ -477,19 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
         txtToggleEmpty.textContent = t('btnHideEmpty');
         showToast(t('toastUnhiddenEmpty'));
       }
-    }
-  });
-
-  // Purge Empty Columns
-  document.getElementById('btn-purge-empty').addEventListener('click', () => {
-    closeDrawer();
-    const count = sheet.purgeEmptyColumns();
-    if (count === 0) {
-      showToast(t('toastNoEmpty'));
-    } else {
-      showToast(t('toastPurgedEmpty').replace('{count}', count));
-      btnToggleEmpty.classList.remove('btn-primary');
-      txtToggleEmpty.textContent = t('btnHideEmpty');
+      sheetManager.debounceSave();
     }
   });
 
@@ -497,45 +758,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-sample-data').addEventListener('click', () => {
     closeDrawer();
     sheet.loadData(SAMPLE_CONTACTS);
+    sheetManager.saveCurrentImmediate();
     showToast(t('toastSampleLoaded'));
   });
 
-  // Clear Table
-  document.getElementById('btn-clear-table').addEventListener('click', () => {
-    closeDrawer();
-    const confirmMsg = currentLang === 'ar' ? 'هل تريد بالتأكيد مسح جميع جهات الاتصال وإعادة التعيين؟' : 'Clear all contacts and reset spreadsheet?';
-    if (confirm(confirmMsg)) {
-      sheet.clearAllRows();
-      showToast(t('toastReset'));
-    }
-  });
-
-  // Standardize Saudi Phone Numbers (+966)
-  function handleStandardizePhones() {
-    const count = sheet.standardizeAllPhones();
-    if (count > 0) {
-      showToast(t('toastPhonesStandardized').replace('{count}', count));
-    } else {
-      showToast(t('toastNoPhonesNeedStandardizing'));
-    }
-  }
-
-  if (btnStandardizePhones) {
-    btnStandardizePhones.addEventListener('click', handleStandardizePhones);
-  }
-
-  if (btnDrawerStd) {
-    btnDrawerStd.addEventListener('click', () => {
-      closeDrawer();
-      handleStandardizePhones();
-    });
-  }
-
+  // Drawer Export Button
   if (btnDrawerExport) {
     btnDrawerExport.addEventListener('click', () => {
       closeDrawer();
-      updateExportPreview();
-      exportModal.showModal();
+      openExportModal();
     });
   }
 
@@ -621,11 +852,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    sheetManager.saveCurrentImmediate();
     quickPasteModal.close();
     showToast(t('toastQuickPasteSuccess').replace('{count}', extractedContacts.length));
   });
 
-  // Export Modal Management
+  // Export Modal Management & Smart Device Detection
   const exportFormatPills = document.querySelectorAll('#export-format-pills .format-pill');
   const previewBox = document.getElementById('export-preview');
   const previewMeta = document.getElementById('preview-meta');
@@ -717,12 +949,59 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.getElementById('btn-open-export').addEventListener('click', () => {
+  function openExportModal() {
+    closeDrawer();
+    const platform = detectUserPlatform(currentLang);
+    currentFormat = platform.recommendedFormat;
+
+    // Highlight recommended radio
+    exportFormatPills.forEach(pill => {
+      const radio = pill.querySelector('input');
+      if (radio && radio.value === currentFormat) {
+        pill.classList.add('active');
+        radio.checked = true;
+      } else {
+        pill.classList.remove('active');
+      }
+    });
+
+    const detectTitle = document.getElementById('device-detect-title');
+    const detectDesc = document.getElementById('device-detect-desc');
+    const detectIcon = document.getElementById('device-detect-icon');
+    const badgeRecommended = document.getElementById('badge-recommended');
+
+    if (detectTitle) {
+      detectTitle.textContent = (t('exportDeviceRecommended') || 'الصيغة المثالية لجهازك ({device}) محددة تلقائياً').replace('{device}', platform.deviceName);
+    }
+    if (detectDesc) {
+      detectDesc.textContent = platform.desc;
+    }
+    if (detectIcon) {
+      detectIcon.innerHTML = (platform.isIOS || platform.isAndroid)
+        ? '<svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>'
+        : '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
+    }
+    if (badgeRecommended) {
+      badgeRecommended.textContent = currentLang === 'ar' ? 'موصى به' : 'Recommended';
+    }
+
+    // Guidance tip strictly for iOS devices (hidden on Desktop/Android to preserve clean vertical space)
+    const iosTip = document.getElementById('export-ios-tip');
+    if (iosTip) {
+      iosTip.style.display = platform.isIOS ? 'flex' : 'none';
+    }
+
     updateExportPreview();
     exportModal.showModal();
-  });
+  }
 
+  document.getElementById('btn-open-export').addEventListener('click', openExportModal);
   document.getElementById('btn-close-export').addEventListener('click', () => exportModal.close());
+
+  const btnCloseExportModal = document.getElementById('btn-close-export-modal');
+  if (btnCloseExportModal) {
+    btnCloseExportModal.addEventListener('click', () => exportModal.close());
+  }
 
   // Copy to Clipboard
   document.getElementById('btn-copy-export').addEventListener('click', () => {
@@ -738,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Download File (with UTF-8 BOM for Arabic CSV/TSV Excel compatibility)
+  // Force Download File (using application/octet-stream for VCF to bypass iOS Safari contact preview!)
   document.getElementById('btn-download-export').addEventListener('click', () => {
     const content = previewBox.textContent;
     if (!content || content.startsWith('(')) {
@@ -747,20 +1026,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const filename = filenameInput.value.trim() || 'contacts.vcf';
-    let mimeType = 'text/plain;charset=utf-8';
+    let mimeType = 'application/octet-stream';
     let outputData = content;
 
-    if (filename.endsWith('.vcf')) {
-      mimeType = 'text/vcard;charset=utf-8';
-    } else if (filename.endsWith('.csv')) {
+    if (filename.endsWith('.csv')) {
       mimeType = 'text/csv;charset=utf-8';
-      // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel opens Arabic characters cleanly without mojibake
       outputData = '\uFEFF' + content;
     } else if (filename.endsWith('.tsv')) {
       mimeType = 'text/tab-separated-values;charset=utf-8';
       outputData = '\uFEFF' + content;
     } else if (filename.endsWith('.json')) {
       mimeType = 'application/json;charset=utf-8';
+    } else if (filename.endsWith('.vcf')) {
+      // Force octet-stream so iOS Safari triggers the native file download prompt instead of opening single contact preview
+      mimeType = 'application/octet-stream';
     }
 
     const blob = new Blob([outputData], { type: mimeType });
@@ -776,6 +1055,48 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast(t('toastDownloaded').replace('{file}', filename));
     exportModal.close();
   });
+
+  // Web Share API (native iOS share sheet for direct WhatsApp / Files / AirDrop sharing)
+  const btnShareExport = document.getElementById('btn-share-export');
+  if (btnShareExport) {
+    btnShareExport.addEventListener('click', async () => {
+      const content = previewBox.textContent;
+      if (!content || content.startsWith('(')) {
+        showToast(t('toastNothingToExport'));
+        return;
+      }
+
+      const filename = filenameInput.value.trim() || 'contacts.vcf';
+      let outputData = content;
+      if (filename.endsWith('.csv') || filename.endsWith('.tsv')) {
+        outputData = '\uFEFF' + content;
+      }
+
+      try {
+        const file = new File([outputData], filename, {
+          type: filename.endsWith('.vcf') ? 'text/vcard' : 'text/plain'
+        });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: filename,
+            text: filename
+          });
+          exportModal.close();
+          showToast(currentLang === 'ar' ? 'تمت المشاركة بنجاح' : 'Shared successfully');
+        } else {
+          // Fallback to direct download
+          document.getElementById('btn-download-export').click();
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('Share error:', err);
+          document.getElementById('btn-download-export').click();
+        }
+      }
+    });
+  }
 
   // Import Modal Management
   const dropZone = document.getElementById('import-drop-zone');
