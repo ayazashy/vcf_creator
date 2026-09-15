@@ -1,6 +1,7 @@
 # Contacts Sheet & VCF Creator (محرر جهات الاتصال وجداول VCF)
 
 A fast, lightweight, framework-free web platform designed to create, edit, and organize tabular contact datasets like a spreadsheet, with instant one-click export to **VCF (vCard 2.1, 3.0, 4.0)**, **Google Contacts CSV**, **Outlook CSV**, **Standard CSV**, **TSV**, and **JSON**.
+## 🟢 available at https://ayazashy.github.io/vcf_creator :)
 
 Built specifically to solve contact formatting, empty field cleanup, and non-ASCII/Arabic encoding compatibility across modern and legacy devices.
 
